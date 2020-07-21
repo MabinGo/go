@@ -401,9 +401,6 @@ Loop:
 			if !d.sync {
 				break Loop
 			}
-			if d.index > d.windowEnd {
-				panic("index > windowEnd")
-			}
 			if lookahead == 0 {
 				// Flush current output block if any.
 				if d.byteAvailable {
@@ -527,10 +524,11 @@ func (d *compressor) fillStore(b []byte) int {
 }
 
 func (d *compressor) store() {
-	if d.windowEnd > 0 && (d.windowEnd == maxStoreBlockSize || d.sync) {
-		d.err = d.writeStoredBlock(d.window[:d.windowEnd])
-		d.windowEnd = 0
+	if !d.sync || d.windowEnd == 0 && d.windowEnd < maxStoreBlockSize {
+		return
 	}
+	d.err = d.writeStoredBlock(d.window[:d.windowEnd])
+	d.windowEnd = 0
 }
 
 // storeHuff compresses and stores the currently added data
