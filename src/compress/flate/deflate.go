@@ -387,9 +387,6 @@ func (d *compressor) deflate() {
 	}
 
 	d.maxInsertIndex = d.windowEnd - (minMatchLength - 1)
-	if d.index < d.maxInsertIndex {
-		d.hash = hash4(d.window[d.index : d.index+minMatchLength])
-	}
 
 Loop:
 	for {
