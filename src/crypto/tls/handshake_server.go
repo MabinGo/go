@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"io"
 	"sync/atomic"
-	"time"
 )
 
 // serverHandshakeState contains details of a server handshake in progress.
@@ -25,14 +24,11 @@ type serverHandshakeState struct {
 	clientHello  *clientHelloMsg
 	hello        *serverHelloMsg
 	suite        *cipherSuite
-	ecdheOk      bool
-	ecSignOk     bool
-	rsaDecryptOk bool
-	rsaSignOk    bool
 	sessionState *sessionState
 	finishedHash finishedHash
 	masterSecret []byte
 	cert         *Certificate
+	cipherSuites int
 }
 
 // serverHandshake performs a TLS handshake as a server.
@@ -232,9 +228,8 @@ func (hs *serverHandshakeState) processClientHello() error {
 		hs.hello.scts = hs.cert.SignedCertificateTimestamps
 	}
 
-	hs.ecdheOk = supportsECDHE(c.config, hs.clientHello.supportedCurves, hs.clientHello.supportedPoints)
-
-	if hs.ecdheOk {
+	if supportsECDHE(c.config, hs.clientHello.supportedCurves, hs.clientHello.supportedPoints) {
+		hs.cipherSuites |= suiteECDHE
 		// Although omitting the ec_point_formats extension is permitted, some
 		// old OpenSSL version will refuse to handshake if not present.
 		//
@@ -246,11 +241,11 @@ func (hs *serverHandshakeState) processClientHello() error {
 	if priv, ok := hs.cert.PrivateKey.(crypto.Signer); ok {
 		switch priv.Public().(type) {
 		case *ecdsa.PublicKey:
-			hs.ecSignOk = true
+			hs.cipherSuites |= suiteECSign
 		case ed25519.PublicKey:
-			hs.ecSignOk = true
+			hs.cipherSuites |= suiteECSign
 		case *rsa.PublicKey:
-			hs.rsaSignOk = true
+			hs.cipherSuites |= suiteRSASign
 		default:
 			c.sendAlert(alertInternalError)
 			return fmt.Errorf("tls: unsupported signing key type (%T)", priv.Public())
@@ -259,11 +254,14 @@ func (hs *serverHandshakeState) processClientHello() error {
 	if priv, ok := hs.cert.PrivateKey.(crypto.Decrypter); ok {
 		switch priv.Public().(type) {
 		case *rsa.PublicKey:
-			hs.rsaDecryptOk = true
+			hs.cipherSuites |= suiteRSASDecrypt
 		default:
 			c.sendAlert(alertInternalError)
 			return fmt.Errorf("tls: unsupported decryption key type (%T)", priv.Public())
 		}
+	}
+	if hs.c.vers >= VersionTLS12 {
+		hs.cipherSuites |= suiteTLS12
 	}
 
 	return nil
@@ -325,24 +323,8 @@ func (hs *serverHandshakeState) pickCipherSuite() error {
 }
 
 func (hs *serverHandshakeState) cipherSuiteOk(c *cipherSuite) bool {
-	if c.flags&suiteECDHE != 0 {
-		if !hs.ecdheOk {
-			return false
-		}
-		if c.flags&suiteECSign != 0 {
-			if !hs.ecSignOk {
-				return false
-			}
-		} else if !hs.rsaSignOk {
-			return false
-		}
-	} else if !hs.rsaDecryptOk {
-		return false
-	}
-	if hs.c.vers < VersionTLS12 && c.flags&suiteTLS12 != 0 {
-		return false
-	}
-	return true
+	flag := c.flags & (suiteECDHE | suiteECSign | suiteRSASign | suiteRSASDecrypt | suiteTLS12)
+	return hs.cipherSuites&flag == flag
 }
 
 // checkForResumption reports whether we should perform resumption on this connection.
@@ -360,11 +342,6 @@ func (hs *serverHandshakeState) checkForResumption() bool {
 	hs.sessionState = &sessionState{usedOldKey: usedOldKey}
 	ok := hs.sessionState.unmarshal(plaintext)
 	if !ok {
-		return false
-	}
-
-	createdAt := time.Unix(int64(hs.sessionState.createdAt), 0)
-	if c.config.time().Sub(createdAt) > maxSessionTicketLifetime {
 		return false
 	}
 
