@@ -357,26 +357,26 @@ func (hs *serverHandshakeState) checkForResumption() bool {
 	if plaintext == nil {
 		return false
 	}
-	hs.sessionState = &sessionState{usedOldKey: usedOldKey}
-	ok := hs.sessionState.unmarshal(plaintext)
+	clientSessionState := &sessionState{usedOldKey: usedOldKey}
+	ok := clientSessionState.unmarshal(plaintext)
 	if !ok {
 		return false
 	}
 
-	createdAt := time.Unix(int64(hs.sessionState.createdAt), 0)
+	createdAt := time.Unix(int64(clientSessionState.createdAt), 0)
 	if c.config.time().Sub(createdAt) > maxSessionTicketLifetime {
 		return false
 	}
 
 	// Never resume a session for a different TLS version.
-	if c.vers != hs.sessionState.vers {
+	if c.vers != clientSessionState.vers {
 		return false
 	}
 
 	cipherSuiteOk := false
 	// Check that the client is still offering the ciphersuite in the session.
 	for _, id := range hs.clientHello.cipherSuites {
-		if id == hs.sessionState.cipherSuite {
+		if id == clientSessionState.cipherSuite {
 			cipherSuiteOk = true
 			break
 		}
@@ -385,14 +385,7 @@ func (hs *serverHandshakeState) checkForResumption() bool {
 		return false
 	}
 
-	// Check that we also support the ciphersuite from the session.
-	hs.suite = selectCipherSuite([]uint16{hs.sessionState.cipherSuite},
-		c.config.cipherSuites(), hs.cipherSuiteOk)
-	if hs.suite == nil {
-		return false
-	}
-
-	sessionHasClientCerts := len(hs.sessionState.certificates) != 0
+	sessionHasClientCerts := len(clientSessionState.certificates) != 0
 	needClientCerts := requiresClientCert(c.config.ClientAuth)
 	if needClientCerts && !sessionHasClientCerts {
 		return false
@@ -400,6 +393,15 @@ func (hs *serverHandshakeState) checkForResumption() bool {
 	if sessionHasClientCerts && c.config.ClientAuth == NoClientCert {
 		return false
 	}
+
+	// Check that we also support the ciphersuite from the session.
+	hs.suite = selectCipherSuite([]uint16{clientSessionState.cipherSuite},
+		c.config.cipherSuites(), hs.cipherSuiteOk)
+	if hs.suite == nil {
+		return false
+	}
+
+	hs.sessionState = clientSessionState
 
 	return true
 }
@@ -621,6 +623,10 @@ func (hs *serverHandshakeState) doFullHandshake() error {
 		}
 
 		signed := hs.finishedHash.hashForClientCertificate(sigType, sigHash, hs.masterSecret)
+		cert:=c.peerCertificates[0]
+		if cert.KeyUsage != 0 && cert.KeyUsage&x509.KeyUsageDigitalSignature == 0 {
+			return errors.New("tls: invalid signature: the certificate cannot sign this kind of data")
+		}
 		if err := verifyHandshakeSignature(sigType, pub, sigHash, signed, certVerify.signature); err != nil {
 			c.sendAlert(alertDecryptError)
 			return errors.New("tls: invalid signature by the client certificate: " + err.Error())

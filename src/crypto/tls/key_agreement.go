@@ -67,6 +67,9 @@ func (ka rsaKeyAgreement) generateClientKeyExchange(config *Config, clientHello 
 		return nil, nil, err
 	}
 
+	if cert.KeyUsage != 0 && cert.KeyUsage&x509.KeyUsageKeyEncipherment == 0 {
+		return nil,nil,errors.New("tls: invalid signature: the certificate cannot sign this kind of secret dkey")
+	}
 	encrypted, err := rsa.EncryptPKCS1v15(config.rand(), cert.PublicKey.(*rsa.PublicKey), preMasterSecret)
 	if err != nil {
 		return nil, nil, err
@@ -319,6 +322,9 @@ func (ka *ecdheKeyAgreement) processServerKeyExchange(config *Config, clientHell
 	sig = sig[2:]
 
 	signed := hashForServerKeyExchange(sigType, sigHash, ka.version, clientHello.random, serverHello.random, serverECDHEParams)
+	if cert.KeyUsage != 0 && cert.KeyUsage&x509.KeyUsageDigitalSignature == 0 {
+		return errors.New("tls: invalid signature: the certificate cannot sign this kind of data")
+	}
 	if err := verifyHandshakeSignature(sigType, cert.PublicKey, sigHash, signed, sig); err != nil {
 		return errors.New("tls: invalid signature by the server certificate: " + err.Error())
 	}
