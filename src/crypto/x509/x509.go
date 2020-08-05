@@ -555,15 +555,40 @@ func oidFromNamedCurve(curve elliptic.Curve) (asn1.ObjectIdentifier, bool) {
 // KeyUsage represents the set of actions that are valid for a given key. It's
 // a bitmap of the KeyUsage* constants.
 type KeyUsage int
-
+//Bits in the KeyUsage type are used as follows(refers to RFC 5280 4.2.1.3):
 const (
+	//The digitalSignature bit is asserted when the subject public key
+	//is used for verifying digital signatures, other than signatures on
+	//certificates (bit 5) and CRLs (bit 6)
 	KeyUsageDigitalSignature KeyUsage = 1 << iota
+	//The contentCommitmentn bit is asserted when the subject public key is
+	//used to verify digital signatures, used to provide a non- repudiation
+	//service that protects against the signing entity falsely denying some
+	//action.
 	KeyUsageContentCommitment
+	//The keyEncipherment bit is asserted when the subject public key is
+	//used for enciphering private or secret keys, i.e., for key transport.
 	KeyUsageKeyEncipherment
+	//The dataEncipherment bit is asserted when the subject public key is used
+	//for directly enciphering raw user data without the use of an intermediate
+	//symmetric cipher.(Uncommon)
 	KeyUsageDataEncipherment
+	//The keyAgreement bit is asserted when the subject public key is used for
+	//key agreement. i.e., for Diffie-Hellman.
 	KeyUsageKeyAgreement
+	//The keyCertSign bit is asserted when the subject public key is used for verifying
+	//signatures on public key certificates.  If the keyCertSign bit is asserted,
+	//then the cA bit in the basic constraints extension (Section 4.2.1.9) MUST
+	//also be asserted.
 	KeyUsageCertSign
+	//The cRLSign bit is asserted when the subject public key is used for
+	//verifying signatures on certificate revocation lists (e.g., CRLs, delta
+	//CRLs, or ARLs).
 	KeyUsageCRLSign
+	//The meaning of the encipherOnly/KeyUsageDecipherOnly bit is undefined in the
+	//absence of the keyAgreement bit.  When the encipherOnly bit is asserted and
+	//the keyAgreement bit is also set, the subject public key may be used only for
+	//enciphering/deciphering data while performing key agreement.
 	KeyUsageEncipherOnly
 	KeyUsageDecipherOnly
 )
@@ -923,6 +948,9 @@ func checkSignature(algo SignatureAlgorithm, signed, signature []byte, publicKey
 // CheckCRLSignature checks that the signature in crl is from c.
 func (c *Certificate) CheckCRLSignature(crl *pkix.CertificateList) error {
 	algo := getSignatureAlgorithmFromAI(crl.SignatureAlgorithm)
+	if c.KeyUsage != 0 && c.KeyUsage&KeyUsageCRLSign == 0 {
+		return errors.New("x509: invalid signature: this certificate cannot sign CRLs")
+	}
 	return c.CheckSignature(algo, crl.TBSCertList.Raw, crl.SignatureValue.RightAlign())
 }
 

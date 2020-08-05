@@ -9,6 +9,7 @@ import (
 	"crypto"
 	"crypto/hmac"
 	"crypto/rsa"
+	"crypto/x509"
 	"errors"
 	"hash"
 	"io"
@@ -816,6 +817,10 @@ func (hs *serverHandshakeStateTLS13) readClientCertificate() error {
 			return errors.New("tls: client certificate used with invalid signature algorithm")
 		}
 		signed := signedMessage(sigHash, clientSignatureContext, hs.transcript)
+		cert := c.peerCertificates[0]
+		if cert.KeyUsage != 0 && cert.KeyUsage&x509.KeyUsageDigitalSignature == 0 {
+			return errors.New("tls: invalid signature: the certificate cannot sign this kind of data")
+		}
 		if err := verifyHandshakeSignature(sigType, c.peerCertificates[0].PublicKey,
 			sigHash, signed, certVerify.signature); err != nil {
 			c.sendAlert(alertDecryptError)

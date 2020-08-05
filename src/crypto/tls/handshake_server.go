@@ -623,6 +623,10 @@ func (hs *serverHandshakeState) doFullHandshake() error {
 		}
 
 		signed := hs.finishedHash.hashForClientCertificate(sigType, sigHash, hs.masterSecret)
+		cert:=c.peerCertificates[0]
+		if cert.KeyUsage != 0 && cert.KeyUsage&x509.KeyUsageDigitalSignature == 0 {
+			return errors.New("tls: invalid signature: the certificate cannot sign this kind of data")
+		}
 		if err := verifyHandshakeSignature(sigType, pub, sigHash, signed, certVerify.signature); err != nil {
 			c.sendAlert(alertDecryptError)
 			return errors.New("tls: invalid signature by the client certificate: " + err.Error())

@@ -252,6 +252,9 @@ func (c *Certificate) systemVerify(opts *VerifyOptions) (chains [][]*Certificate
 		if parent.PublicKeyAlgorithm != ECDSA {
 			continue
 		}
+		if parent.KeyUsage != 0 && parent.KeyUsage&KeyUsageCertSign == 0 {
+			return nil,errors.New("x509: invalid signature: parent certificate cannot sign this kind of certificate")
+		}
 		if err := parent.CheckSignature(chain[i].SignatureAlgorithm,
 			chain[i].RawTBSCertificate, chain[i].Signature); err != nil {
 			return nil, err
