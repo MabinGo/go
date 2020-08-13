@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"regexp"
 	"strconv"
 	"strings"
 	"unicode"
@@ -2030,23 +2031,11 @@ func emitCDATA(w io.Writer, s []byte) error {
 // procInst parses the `param="..."` or `param='...'`
 // value out of the provided string, returning "" if not found.
 func procInst(param, s string) string {
-	// TODO: this parsing is somewhat lame and not exact.
-	// It works for all actual cases, though.
-	param = param + "="
-	idx := strings.Index(s, param)
-	if idx == -1 {
+	// regexp match `param="..."` or `param='...'`
+	r, _ := regexp.Compile(param + "=" + "(('([^']*)')|(\"([^\"]*)\"))")
+	index := r.FindStringIndex(s)
+	if index == nil {
 		return ""
 	}
-	v := s[idx+len(param):]
-	if v == "" {
-		return ""
-	}
-	if v[0] != '\'' && v[0] != '"' {
-		return ""
-	}
-	idx = strings.IndexRune(v[1:], rune(v[0]))
-	if idx == -1 {
-		return ""
-	}
-	return v[1 : idx+1]
+	return s[index[0]+len(param)+2 : index[1]-1]
 }
