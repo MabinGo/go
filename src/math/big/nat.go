@@ -1176,10 +1176,10 @@ func greaterThan(x1, x2, y1, y2 Word) bool {
 
 // modW returns x % d.
 func (x nat) modW(d Word) (r Word) {
-	// TODO(agl): we don't actually need to store the q value.
-	var q nat
-	q = q.make(len(x))
-	return divWVW(q, 0, x, d)
+	for i := len(x) - 1; i >= 0; i-- {
+		_, r = divWW(r, x[i], d)
+	}
+	return	r
 }
 
 // random creates a random integer in [0..limit), using the space in z if
