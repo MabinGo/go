@@ -24,13 +24,46 @@ const digits = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 const MaxBase = 10 + ('z' - 'a' + 1) + ('Z' - 'A' + 1)
 const maxBaseSmall = 10 + ('z' - 'a' + 1)
 
+var pMaxPow32 = [61]Word{
+	0x80000000, 0xcfd41b91, 0x40000000, 0x48c27395, 0x81bf1000, 0x75db9c97, 0x40000000, 0xcfd41b91,
+	0x3b9aca00, 0x8c8b6d2b, 0x19a10000, 0x309f1021, 0x57f6c100, 0x98c29b81, 0x10000000, 0x18754571,
+	0x247dbc80, 0x3547667b, 0x4c4b4000, 0x6b5a6e1d, 0x94ace180, 0xcaf18367, 0x0b640000, 0x0e8d4a51,
+	0x1269ae40, 0x17179149, 0x1cb91000, 0x23744899, 0x2b73a840, 0x34e63b41, 0x40000000, 0x4cfa3cc1,
+	0x5c13d840, 0x6d91b519, 0x81bf1000, 0x98ede0c9, 0xb3773e40, 0xd1bbc4d1, 0xf4240000, 0x06e7d349,
+	0x07ca30a0, 0x08c32bbb, 0x09d46c00, 0x0affacfd, 0x0c46bee0, 0x0dab86ef, 0x0f300000, 0x10d63af1,
+	0x12a05f20, 0x1490aae3, 0x16a97400, 0x18ed2825, 0x1b5e4d60, 0x1dff8297, 0x20d38000, 0x23dd1799,
+	0x271f35a0, 0x2a9ce10b, 0x2e593c00, 0x3257844d, 0x369b13e0,
+}
+var nMaxPow32 = [61]int{31, 20, 15, 13, 12, 11, 10, 10, 9, 9, 8, 8, 8, 8, 7, 7, 7, 7, 7, 7, 7, 7, 6, 6, 6, 6, 6, 6,
+	6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5}
+var pMaxPow64 = [61]Word{
+	0x8000000000000000, 0xa8b8b452291fe821, 0x4000000000000000, 0x6765c793fa10079d, 0x41c21cb8e1000000, 0x3642798750226111,
+	0x8000000000000000, 0xa8b8b452291fe821, 0x8ac7230489e80000, 0x4d28cb56c33fa539, 0x1eca170c00000000, 0x780c7372621bd74d,
+	0x1e39a5057d810000, 0x5b27ac993df97701, 0x1000000000000000, 0x27b95e997e21d9f1, 0x5da0e1e53c5c8000, 0xd2ae3299c1c4aedb,
+	0x16bcc41e90000000, 0x2d04b7fdd9c0ef49, 0x5658597bcaa24000, 0xa0e2073737609371, 0x0c29e98000000000, 0x14adf4b7320334b9,
+	0x226ed36478bfa000, 0x383d9170b85ff80b, 0x5a3c23e39c000000, 0x8e65137388122bcd, 0xdd41bb36d259e000, 0x0aee5720ee830681,
+	0x1000000000000000, 0x172588ad4f5f0981, 0x211e44f7d02c1000, 0x2ee56725f06e5c71, 0x41c21cb8e1000000, 0x5b5b57f8a98a5dd1,
+	0x7dcff8986ea31000, 0xabd4211662a6b2a1, 0xe8d4a51000000000, 0x07a32956ad081b79, 0x09f49aaff0e86800, 0x0ce583bb812d37b3,
+	0x109b79a654c00000, 0x1543beff214c8b95, 0x1b149a79459a3800, 0x224edfb5434a830f, 0x2b3fb00000000000, 0x3642798750226111,
+	0x43c33c1937564800, 0x54411b2441c3cd8b, 0x6851455acd400000, 0x80a23b117c8feb6d, 0x9dff7d32d5dc1800, 0xc155af6faeffe6a7,
+	0xebb7392e00000000, 0x050633659656d971, 0x05fa8624c7fba400, 0x0717d9faa73c5679, 0x086430aac6100000, 0x09e64d9944b57f29,
+	0x0ba5ca5392cb0400,
+}
+var nMaxPow64 = [61]int{63, 40, 31, 27, 24, 22, 21, 20, 19, 18, 17, 17, 16, 16, 15, 15, 15, 15, 14, 14, 14, 14, 13, 13, 13, 13, 13, 13, 13,
+	12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 10, 10, 10, 10, 10, 10}
+
 // maxPow returns (b**n, n) such that b**n is the largest power b**n <= _M.
 // For instance maxPow(10) == (1e19, 19) for 19 decimal digits in a 64bit Word.
 // In other words, at most n digits in base b fit into a Word.
-// TODO(gri) replace this with a table, generated at build time.
 func maxPow(b Word) (p Word, n int) {
+	if b >= 2 && b <= 62 {
+		if _W == 32 {
+			return pMaxPow32[b-2], nMaxPow32[b-2]
+		}
+		return pMaxPow64[b-2], nMaxPow64[b-2]
+	}
 	p, n = b, 1 // assuming b <= _M
-	for max := _M / b; p <= max; {
+	for max := (_M) / b; p <= max; {
 		// p == b**n && p <= max
 		p *= b
 		n++
